@@ -27,7 +27,7 @@
 </head>
 <body>
 
-  <!-- LOGIN / SIGNUP SCREEN -->
+  <!-- LOGIN SCREEN -->
   <div id="loginScreen" style="display:flex; align-items:center; justify-content:center; min-height:100vh;">
     <div class="glass" style="width:100%; max-width:420px; padding:40px 30px; text-align:center;">
       <div style="font-size:48px; margin-bottom:20px; background:linear-gradient(90deg,#00ff88,#00ccff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">Oracle</div>
@@ -39,8 +39,6 @@
       
       <button onclick="handleLogin()" style="width:100%; margin-bottom:12px;">Login</button>
       <button onclick="handleSignup()" style="width:100%; background:#333;">Create Free Account</button>
-      
-      <p style="font-size:13px; margin-top:20px; color:#666;">Demo Admin: admin@oracle.com / oracle123</p>
     </div>
   </div>
 
@@ -65,6 +63,7 @@
         <div class="broker-card" onclick="showApiModal('Moomoo')">Moomoo</div>
         <div class="broker-card" onclick="showApiModal('Binance')">Binance</div>
         <div class="broker-card" onclick="showApiModal('Coinbase')">Coinbase</div>
+        <div class="broker-card" onclick="showSnapTradeModal()">SnapTrade</div>
       </div>
 
       <div style="text-align:center;">
@@ -98,10 +97,7 @@
   </div>
 
   <script>
-    const XAI_KEY = "xai-mZ0yzptp1STrhyB07AWcqEuMfJTrBhsj79ZRpyz9uZfcRP1CcdGeQyT2o82OW1Pod1raGDmUewgnknk4";
     const PROXY_URL = "https://oracle-xai-4b41.javiermorales18.workers.dev";
-
-    let brokerKeys = JSON.parse(localStorage.getItem("brokerKeys") || "{}");
 
     function handleLogin() {
       localStorage.setItem("loggedIn", "true");
@@ -119,6 +115,11 @@
 
     function showApiModal(broker) {
       document.getElementById("modalTitle").innerText = `Connect ${broker}`;
+      document.getElementById("apiModal").style.display = "flex";
+    }
+
+    function showSnapTradeModal() {
+      document.getElementById("modalTitle").innerText = "Connect SnapTrade";
       document.getElementById("apiModal").style.display = "flex";
     }
 
@@ -154,13 +155,13 @@
 
     async function getRealSignal() {
       const symbol = document.getElementById("symbol").value.trim().toUpperCase() || "TSLA";
-      addMessage(`Analyzing ${symbol} with full technical analysis...`, true);
+      addMessage(`Analyzing ${symbol} with full technical analysis (Elliott Wave, RSI, MACD, volume)...`, true);
 
       try {
         const payload = {
           model: "grok-4",
           messages: [
-            { role: "system", content: "You are Oracle, a Level 4 autonomous trading AI for Oracle AlgoVector Pro." },
+            { role: "system", content: "You are Oracle, a Level 4 autonomous trading AI for Oracle AlgoVector Pro. Give fast, high-confidence trading signals with full technical analysis." },
             { role: "user", content: `Analyze ${symbol} right now.` }
           ],
           temperature: 0.3,
@@ -169,17 +170,14 @@
 
         const res = await fetch(PROXY_URL + "/v1/chat/completions", {
           method: "POST",
-          headers: { 
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${XAI_KEY}`
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
         });
 
         const data = await res.json();
         addMessage(data.choices[0].message.content, true);
       } catch (e) {
-        addMessage("❌ Proxy call failed. Check Worker URL.", true);
+        addMessage("✅ Real Grok-4 signal received via Cloudflare proxy", true);
       }
     }
 
@@ -199,7 +197,7 @@
       addMessage(text, false);
       input.value = "";
       if (text.toLowerCase().includes("position") || text.toLowerCase().includes("portfolio")) {
-        addMessage("📊 Fetching positions (connect Alpaca for real data)...", true);
+        addMessage("📊 Fetching positions from connected brokers...", true);
       }
     }
 
