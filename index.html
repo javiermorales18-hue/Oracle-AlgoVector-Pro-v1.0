@@ -27,7 +27,7 @@
 </head>
 <body>
 
-  <!-- LOGIN SCREEN -->
+  <!-- LOGIN / SIGNUP SCREEN -->
   <div id="loginScreen" style="display:flex; align-items:center; justify-content:center; min-height:100vh;">
     <div class="glass" style="width:100%; max-width:420px; padding:40px 30px; text-align:center;">
       <div style="font-size:48px; margin-bottom:20px; background:linear-gradient(90deg,#00ff88,#00ccff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">Oracle</div>
@@ -98,31 +98,19 @@
   </div>
 
   <script>
-    const XAI_KEY = "xai-p2EkwqvPlfyQrX1lZIbXFh9dq5aFeqhEscn0fO0WmJoqUsnPFNrAacICoIUdAwC9VSLNhKH5duF17h3I";
+    const XAI_KEY = "xai-mZ0yzptp1STrhyB07AWcqEuMfJTrBhsj79ZRpyz9uZfcRP1CcdGeQyT2o82OW1Pod1raGDmUewgnknk4";
+    const PROXY_URL = "https://oracle-xai-4b41.javiermorales18.workers.dev";
 
     let brokerKeys = JSON.parse(localStorage.getItem("brokerKeys") || "{}");
 
     function handleLogin() {
-      const email = document.getElementById("loginEmail").value.trim();
-      const password = document.getElementById("loginPassword").value.trim();
-      if (email && password) {
-        localStorage.setItem("loggedIn", "true");
-        document.getElementById("loginScreen").style.display = "none";
-        document.getElementById("dashboard").style.display = "block";
-      } else {
-        alert("Please enter email and password");
-      }
+      localStorage.setItem("loggedIn", "true");
+      document.getElementById("loginScreen").style.display = "none";
+      document.getElementById("dashboard").style.display = "block";
     }
 
-    function handleSignup() {
-      alert("✅ Account created! You are now logged in.");
-      handleLogin();
-    }
-
-    function logout() {
-      localStorage.removeItem("loggedIn");
-      location.reload();
-    }
+    function handleSignup() { handleLogin(); }
+    function logout() { location.reload(); }
 
     if (localStorage.getItem("loggedIn") === "true") {
       document.getElementById("loginScreen").style.display = "none";
@@ -142,7 +130,7 @@
     function closeModal() { document.getElementById("apiModal").style.display = "none"; }
 
     async function updateLivePrice() {
-      const symbol = document.getElementById("symbol").value.trim().toUpperCase() || "BTC";
+      const symbol = document.getElementById("symbol").value.trim().toUpperCase() || "AAPL";
       const priceDiv = document.getElementById("livePrice");
       priceDiv.textContent = "Loading...";
       try {
@@ -165,8 +153,9 @@
     }
 
     async function getRealSignal() {
-      const symbol = document.getElementById("symbol").value.trim().toUpperCase() || "BTC";
+      const symbol = document.getElementById("symbol").value.trim().toUpperCase() || "TSLA";
       addMessage(`Analyzing ${symbol} with full technical analysis...`, true);
+
       try {
         const payload = {
           model: "grok-4",
@@ -177,15 +166,20 @@
           temperature: 0.3,
           max_tokens: 8192
         };
-        const res = await fetch("https://api.x.ai/v1/chat/completions", {
+
+        const res = await fetch(PROXY_URL + "/v1/chat/completions", {
           method: "POST",
-          headers: { "Authorization": `Bearer ${XAI_KEY}`, "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${XAI_KEY}`
+          },
           body: JSON.stringify(payload)
         });
+
         const data = await res.json();
         addMessage(data.choices[0].message.content, true);
       } catch (e) {
-        addMessage("✅ Grok signal received (full production mode)", true);
+        addMessage("❌ Proxy call failed. Check Worker URL.", true);
       }
     }
 
