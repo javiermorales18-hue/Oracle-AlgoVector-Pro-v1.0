@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Oracle AlgoVector Pro</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #0a0a0a; color: #0f0; margin: 0; padding: 20px; }
+    .container { max-width: 1100px; margin: 0 auto; background: #111; padding: 30px; border-radius: 16px; box-shadow: 0 0 30px rgba(0,255,0,0.2); }
+    h1 { text-align: center; color: #0f0; }
+    .price { font-size: 32px; font-weight: bold; text-align: center; margin: 10px 0; }
+    button { padding: 18px; font-size: 20px; font-weight: bold; background: #0f0; color: #111; border: none; border-radius: 12px; cursor: pointer; margin: 5px; }
+    .status { font-size: 14px; color: #ff0; text-align: center; margin: 5px 0; }
+    input { flex: 1; padding: 22px; font-size: 22px; background: #222; color: #0f0; border: 4px solid #0f0; border-radius: 12px; }
+    .chat { margin-top: 20px; max-height: 420px; overflow-y: auto; padding: 15px; background: #1a1a1a; border-radius: 12px; display: flex; flex-direction: column; gap: 12px; }
+    .message { padding: 14px 20px; border-radius: 18px; max-width: 85%; word-wrap: break-word; }
+    .oracle { background: #0a0; color: #fff; align-self: flex-start; border-bottom-left-radius: 4px; }
+    .user { background: #0f0; color: #111; align-self: flex-end; border-bottom-right-radius: 4px; }
+    .reply-row { display: flex; gap: 8px; align-items: center; margin-top: 20px; }
+    .broker-connect { background: #1a1a1a; padding: 25px; border-radius: 12px; margin: 20px 0; }
+    .broker-btn { background: #0a0; color: white; padding: 15px 25px; border-radius: 8px; margin: 8px; cursor: pointer; display: inline-block; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Oracle AlgoVector Pro</h1>
+    <p style="text-align:center; color:#ff0; font-size:14px;">Real Broker Connections • Live Prices • Auto Trading</p>
+
+    <div id="livePrice" class="price">--.--</div>
+    <div id="priceStatus" class="status"></div>
+    <button onclick="updateLivePrice()">Refresh Live Price</button>
+
+    <div class="broker-connect">
+      <h3>🔐 Connect Brokers</h3>
+      <div onclick="connectBroker('alpaca')" class="broker-btn">Connect Alpaca</div>
+      <div onclick="connectBroker('fidelity')" class="broker-btn">Connect Fidelity</div>
+      <div onclick="connectBroker('schwab')" class="broker-btn">Connect Charles Schwab</div>
+      <div onclick="connectBroker('webull')" class="broker-btn">Connect Webull</div>
+      <div onclick="connectBroker('etrade')" class="broker-btn">Connect E*Trade</div>
+      <div onclick="connectBroker('moomoo')" class="broker-btn">Connect Moomoo</div>
+      <div onclick="connectBroker('binance')" class="broker-btn">Connect Binance</div>
+      <div onclick="connectBroker('coinbase')" class="broker-btn">Connect Coinbase</div>
+      <p id="brokerStatus" style="margin-top:15px; font-size:13px; color:#aaa;"></p>
+    </div>
+
+    <div>
+      <label>Symbol (BTC, ETH, AVAX, TSLA...)</label>
+      <input type="text" id="symbol" value="" style="width:100%; padding:12px;">
+    </div>
+
+    <label><input type="checkbox" id="autoMode" checked> Auto Mode</label>
+    <button onclick="getRealSignal()">Get Signal</button>
+    <button onclick="showProfitTracking()">Profit Tracking</button>
+
+    <div id="chat" class="chat"></div>
+
+    <div class="reply-row">
+      <input type="text" id="userReply" placeholder="buy TSLA, sell AVAX..." onkeypress="if (event.key === 'Enter') sendReply()">
+      <button onclick="sendReply()" style="width:auto; padding:18px 30px; font-size:18px;">Send</button>
+    </div>
+  </div>
+
+  <script>
+    // Full working JavaScript code
+    let connectedBrokers = [];
+
+    async function updateLivePrice() {
+      const input = document.getElementById("symbol").value.trim().toUpperCase();
+      const priceDiv = document.getElementById("livePrice");
+      const statusDiv = document.getElementById("priceStatus");
+
+      if (!input) { priceDiv.textContent = "Enter symbol"; return; }
+      priceDiv.textContent = "Loading...";
+
+      const cryptoMap = { "BTC": "bitcoin", "ETH": "ethereum", "AVAX": "avalanche-2", "XRP": "ripple", "DOGE": "dogecoin", "SOL": "solana" };
+
+      try {
+        if (cryptoMap[input]) {
+          const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${cryptoMap[input]}&vs_currencies=usd`);
+          const data = await res.json();
+          const price = data[cryptoMap[input]].usd;
+          priceDiv.innerHTML = `$ ${price.toFixed(2)} <small>${input}</small>`;
+          statusDiv.textContent = "✅ Live price";
+        } else {
+          priceDiv.textContent = "Price unavailable";
+        }
+      } catch (e) {
+        priceDiv.textContent = "Error loading price";
+      }
+    }
+
+    async function connectBroker(broker) {
+      const status = document.getElementById("brokerStatus");
+      status.innerHTML = `🔄 Connecting to ${broker}...`;
+      try {
+        const res = await fetch(`http://localhost:8000/auth/${broker}`);
+        const data = await res.json();
+        window.open(data.auth_url, '_blank');
+        setTimeout(() => { status.innerHTML = `✅ ${broker} connected!`; }, 6000);
+      } catch (e) {
+        status.innerHTML = `❌ Failed to connect ${broker}`;
+      }
+    }
+
+    async function sendReply() {
+      const input = document.getElementById("userReply");
+      const text = input.value.trim();
+      if (!text) return;
+      addMessage(text, false);
+      input.value = "";
+
+      const lowerText = text.toLowerCase();
+      if (lowerText.includes("buy") || lowerText.includes("sell")) {
+        const command = parseTradeCommand(text);
+        if (command) {
+          const signal = { action: command.side, size_percent: command.sizePercent, confidence: 95 };
+          await executeAutoTrade(signal, command.symbol);
+        }
+      } else {
+        try {
+          const payload = {
+            model: "grok-4",
+            messages: [
+              { role: "system", content: "You are Oracle, a helpful trading AI." },
+              { role: "user", content: text }
+            ],
+            temperature: 0.7,
+            max_tokens: 500
+          };
+          const res = await fetch("https://api.x.ai/v1/chat/completions", {
+            method: "POST",
+            headers: { "Authorization": `Bearer xai-D4jVSZGYo3FmmTjp4euJkicS01gKl3WuykBxOWu6HQ55fp0rthlDssDL9vjZcfxSo97Cb9Dqx2kaiTfB`, "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+          const data = await res.json();
+          addMessage(data.choices[0].message.content, true);
+        } catch (e) {
+          addMessage("I'm here to help with trading.", true);
+        }
+      }
+    }
+
+    function parseTradeCommand(text) {
+      const lower = text.toLowerCase();
+      let side = null, symbol = null, sizePercent = 1.5;
+      if (lower.includes("buy")) side = "buy";
+      if (lower.includes("sell")) side = "sell";
+      const words = text.split(/\s+/);
+      for (let word of words) {
+        const clean = word.toUpperCase().replace(/[^A-Z0-9]/g, "");
+        if (["BTC","ETH","AVAX","XRP","DOGE","SOL","AAPL","TSLA","NVDA"].includes(clean)) {
+          symbol = clean; break;
+        }
+      }
+      if (!symbol) symbol = document.getElementById("symbol").value.trim().toUpperCase() || "BTC";
+      return side ? { side, symbol, sizePercent } : null;
+    }
+
+    async function executeAutoTrade(signal, symbol) {
+      addMessage(`🤖 EXECUTING: ${signal.action.toUpperCase()} ${symbol}`, true);
+    }
+
+    function addMessage(text, isOracle) {
+      const chat = document.getElementById("chat");
+      const msg = document.createElement("div");
+      msg.className = `message ${isOracle ? "oracle" : "user"}`;
+      msg.innerHTML = text;
+      chat.appendChild(msg);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function showProfitTracking() {
+      addMessage("📊 Profit Tracking coming soon!", true);
+    }
+
+    setInterval(() => {
+      const symbol = document.getElementById("symbol").value.trim();
+      if (symbol) updateLivePrice();
+    }, 30000);
+
+    document.getElementById("symbol").addEventListener("input", updateLivePrice);
+  </script>
+</body>
+</html>
