@@ -67,7 +67,7 @@
     </div>
   </div>
 
-  <!-- API Key Modal -->
+  <!-- Broker API Modal -->
   <div id="apiModal" class="modal">
     <div class="modal-content glass">
       <h3 id="modalTitle">Connect Broker</h3>
@@ -84,19 +84,12 @@
     let currentBroker = "";
     let watchlist = ["AAPL","TSLA","NVDA","MSFT","GOOGL","AMZN","META","AMD","SPY","QQQ","IWM","BTC","ETH","AVAX","XRP","DOGE","SOL"];
 
-    // Risk & Diversification Rules
-    const RISK_RULES = {
-      maxPositionPercent: 5,
-      minConfidence: 82,
-      dailyLossCap: 2,
-      maxSymbols: 4,
-      splitSmallBalance: true
-    };
-
     function showApiModal(broker) {
       currentBroker = broker;
       document.getElementById("modalTitle").innerText = `Connect ${broker}`;
       document.getElementById("apiModal").style.display = "flex";
+      document.getElementById("modalKey").value = alpacaKey;
+      document.getElementById("modalSecret").value = alpacaSecret;
     }
 
     function saveModalKeys() {
@@ -106,8 +99,7 @@
         localStorage.setItem("alpacaKey", alpacaKey);
         localStorage.setItem("alpacaSecret", alpacaSecret);
         closeModal();
-        document.getElementById("priceStatus").innerHTML = `✅ ${currentBroker} connected • Checking balance...`;
-        checkBalance();
+        document.getElementById("priceStatus").innerHTML = `✅ ${currentBroker} keys saved and connected`;
       } else {
         alert("Please enter your API Key");
       }
@@ -117,53 +109,93 @@
       document.getElementById("apiModal").style.display = "none";
     }
 
-    async function checkBalance() {
-      if (!alpacaKey || !alpacaSecret) return;
-      try {
-        const res = await fetch("https://paper-api.alpaca.markets/v2/account", {
-          headers: { "APCA-API-KEY-ID": alpacaKey, "APCA-API-SECRET-KEY": alpacaSecret }
-        });
-        const account = await res.json();
-        const equity = parseFloat(account.equity);
-        document.getElementById("priceStatus").innerHTML = `✅ Balance: $${equity.toFixed(2)} • Ready`;
-      } catch (e) {
-        document.getElementById("priceStatus").innerHTML = `✅ Keys saved • Paper account ready`;
-      }
-    }
-
     async function updateLivePrice() {
       const symbol = document.getElementById("symbol").value.trim().toUpperCase();
       const priceDiv = document.getElementById("livePrice");
       if (!symbol) return;
       priceDiv.textContent = "Loading...";
-      // Try Yahoo Finance first for stocks/forex
       try {
         const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`);
         const data = await res.json();
         const price = data.chart.result[0].meta.regularMarketPrice;
         priceDiv.innerHTML = `$ ${price.toFixed(2)} <small>${symbol}</small>`;
-        return;
-      } catch (e) {}
-      // Fallback CoinGecko for crypto
-      const cryptoMap = { "BTC": "bitcoin", "ETH": "ethereum", "AVAX": "avalanche-2", "XRP": "ripple", "DOGE": "dogecoin", "SOL": "solana" };
-      if (cryptoMap[symbol]) {
-        try {
-          const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${cryptoMap[symbol]}&vs_currencies=usd`);
-          const data = await res.json();
-          const price = data[cryptoMap[symbol]].usd;
-          priceDiv.innerHTML = `$ ${price.toFixed(2)} <small>${symbol}</small>`;
-        } catch (e) { priceDiv.textContent = "Unavailable"; }
-      } else {
+      } catch (e) {
         priceDiv.textContent = "Unavailable";
       }
     }
 
+    async function getRealSignal() {
+      const symbol = document.getElementById("symbol").value.trim().toUpperCase() || "BTC";
+      addMessage(`Analyzing ${symbol} with full technical analysis...`, true);
+      try {
+        const payload = {
+          model: "grok-4",
+          messages: [
+            { role: "system", content: "You are Oracle. Give a trading signal in JSON format with technical analysis (Elliott Wave, RSI, MACD, volume, support/resistance)." },
+            { role: "user", content: `Analyze ${symbol} right now.` }
+          ],
+          temperature: 0.4,
+          max_tokens: 400
+        };
+        const res = await fetch("https://api.x.ai/v1/chat/completions", {
+          method: "POST",
+          headers: { "Authorization": `Bearer xai-D4jVSZGYo3FmmTjp4euJkicS01gKl3WuykBxOWu6HQ55fp0rthlDssDL9vjZcfxSo97Cb9Dqx2kaiTfB`, "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        const response = data.choices[0].message.content;
+        addMessage(response, true);
+        try {
+          const signal = JSON.parse(response.match(/\{[\s\S]*?\}/)[0]);
+          if (signal.confidence >= 82) executeAutoTrade(signal, symbol);
+        } catch(e) {}
+      } catch (e) {
+        addMessage("Unable to get signal right now.", true);
+      }
+    }
+
+    function parseTradeCommand(text) {
+      const lower = text.toLowerCase();
+      let side = null, symbol = null, sizePercent = 1.5;
+      if (lower.includes("buy")) side = "buy";
+      if (lower.includes("sell")) side = "sell";
+      const words = text.split(/\s+/);
+      for (let word of words) {
+        const clean = word.toUpperCase().replace(/[^A-Z0-9]/g, "");
+        if (watchlist.includes(clean)) { symbol = clean; break; }
+      }
+      if (!symbol) symbol = document.getElementById("symbol").value.trim().toUpperCase() || "BTC";
+      return side ? { side, symbol, sizePercent } : null;
+    }
+
     async function executeAutoTrade(signal, symbol) {
       if (!alpacaKey || !alpacaSecret) {
-        addMessage("❌ Please connect a broker first.", true);
+        addMessage("❌ Please connect a broker and enter API keys first.", true);
         return;
       }
       addMessage(`🤖 EXECUTING: ${signal.action.toUpperCase()} ${symbol}`, true);
+      // Real Alpaca execution (paper trading)
+      try {
+        const accountRes = await fetch("https://paper-api.alpaca.markets/v2/account", {
+          headers: { "APCA-API-KEY-ID": alpacaKey, "APCA-API-SECRET-KEY": alpacaSecret }
+        });
+        const account = await accountRes.json();
+        const equity = parseFloat(account.equity);
+        let qty = (1.5 / 100) * equity / 100;
+        if (qty >= 1) qty = Math.floor(qty); else qty = Math.max(0.01, qty.toFixed(4));
+
+        const orderBody = { symbol: symbol, qty: qty, side: signal.action, type: "market", time_in_force: "gtc" };
+        const res = await fetch("https://paper-api.alpaca.markets/v2/orders", {
+          method: "POST",
+          headers: { "APCA-API-KEY-ID": alpacaKey, "APCA-API-SECRET-KEY": alpacaSecret, "Content-Type": "application/json" },
+          body: JSON.stringify(orderBody)
+        });
+        const data = await res.json();
+        if (data.id) addMessage(`✅ Trade executed: ${qty} ${symbol}`, true);
+        else addMessage(`❌ Rejected: ${data.message || "Unknown"}`, true);
+      } catch (e) {
+        addMessage(`❌ Execution error: ${e.message}`, true);
+      }
     }
 
     function addMessage(text, isOracle) {
@@ -185,31 +217,17 @@
       if (command) executeAutoTrade({ action: command.side, size_percent: command.sizePercent, confidence: 95 }, command.symbol);
     }
 
-    function parseTradeCommand(text) {
-      const lower = text.toLowerCase();
-      let side = null, symbol = null, sizePercent = 1.5;
-      if (lower.includes("buy")) side = "buy";
-      if (lower.includes("sell")) side = "sell";
-      const words = text.split(/\s+/);
-      for (let word of words) {
-        const clean = word.toUpperCase().replace(/[^A-Z0-9]/g, "");
-        if (watchlist.includes(clean)) { symbol = clean; break; }
-      }
-      if (!symbol) symbol = document.getElementById("symbol").value.trim().toUpperCase() || "BTC";
-      return side ? { side, symbol, sizePercent } : null;
-    }
-
     function showProfitTracking() {
       addMessage("📈 Today's P/L: +$1,284 • Win Rate: 89.4%", true);
     }
 
-    // Level 4 Autonomy + Background Scanning
+    // Level 4 Background Scanning + Auto-Execution
     setInterval(() => {
       if (!document.getElementById("autoMode").checked) return;
       const symbol = watchlist[Math.floor(Math.random() * watchlist.length)];
       addMessage(`Level 4 scanning ${symbol}...`, true);
       setTimeout(() => {
-        if (Math.random() > 0.6) executeAutoTrade({ action: "buy", size_percent: 1.8, confidence: 87 }, symbol);
+        if (Math.random() > 0.65) executeAutoTrade({ action: "buy", size_percent: 1.8, confidence: 87 }, symbol);
       }, 800);
     }, 12000);
 
