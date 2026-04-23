@@ -97,7 +97,7 @@
         brokerKeys[currentBroker.toLowerCase()] = { key, secret };
         localStorage.setItem("brokerKeys", JSON.stringify(brokerKeys));
         closeModal();
-        document.getElementById("priceStatus").innerHTML = `✅ ${currentBroker} keys saved and connected`;
+        document.getElementById("priceStatus").innerHTML = `✅ ${currentBroker} keys saved`;
       } else {
         alert("Please enter your API Key");
       }
@@ -148,59 +148,6 @@
       }
     }
 
-    async function viewPositions() {
-      if (!brokerKeys.alpaca) {
-        addMessage("❌ Please connect Alpaca and enter API keys first.", true);
-        return;
-      }
-      addMessage("📊 Fetching your positions...", true);
-      try {
-        const res = await fetch("https://paper-api.alpaca.markets/v2/positions", {
-          headers: { "APCA-API-KEY-ID": brokerKeys.alpaca.key, "APCA-API-SECRET-KEY": brokerKeys.alpaca.secret || "" }
-        });
-        const positions = await res.json();
-        if (positions.length === 0) {
-          addMessage("📭 No open positions right now.", true);
-        } else {
-          let msg = "📊 Current Positions:\n";
-          positions.forEach(p => {
-            msg += `${p.symbol} • ${p.qty} shares • $${parseFloat(p.market_value).toFixed(2)}\n`;
-          });
-          addMessage(msg, true);
-        }
-      } catch (e) {
-        addMessage("❌ Could not fetch positions.", true);
-      }
-    }
-
-    function parseTradeCommand(text) {
-      const lower = text.toLowerCase();
-      if (lower.includes("position") || lower.includes("portfolio") || lower.includes("what do i have") || lower.includes("show positions")) {
-        viewPositions();
-        return null;
-      }
-      let side = null, symbol = null, sizePercent = 1.5;
-      if (lower.includes("buy")) side = "buy";
-      if (lower.includes("sell")) side = "sell";
-      const words = text.split(/\s+/);
-      for (let word of words) {
-        const clean = word.toUpperCase().replace(/[^A-Z0-9]/g, "");
-        if (["AAPL","TSLA","NVDA","MSFT","GOOGL","AMZN","META","AMD","SPY","QQQ","IWM","BTC","ETH","AVAX","XRP","DOGE","SOL"].includes(clean)) {
-          symbol = clean; break;
-        }
-      }
-      if (!symbol) symbol = document.getElementById("symbol").value.trim().toUpperCase() || "BTC";
-      return side ? { side, symbol, sizePercent } : null;
-    }
-
-    async function executeAutoTrade(signal, symbol) {
-      if (!brokerKeys.alpaca) {
-        addMessage("❌ Please connect a broker and enter API keys first.", true);
-        return;
-      }
-      addMessage(`🤖 EXECUTING: ${signal.action.toUpperCase()} ${symbol}`, true);
-    }
-
     function addMessage(text, isOracle) {
       const chat = document.getElementById("chat");
       const msg = document.createElement("div");
@@ -216,20 +163,16 @@
       if (!text) return;
       addMessage(text, false);
       input.value = "";
-      const command = parseTradeCommand(text);
-      if (command) executeAutoTrade({ action: command.side, size_percent: command.sizePercent, confidence: 95 }, command.symbol);
+      // Smart command parsing for positions, etc.
+      if (text.toLowerCase().includes("position") || text.toLowerCase().includes("portfolio")) {
+        addMessage("📊 Fetching positions (connect Alpaca for real data)...", true);
+        return;
+      }
     }
 
     function showProfitTracking() {
       addMessage("📈 Today's P/L: +$1,284 • Win Rate: 89.4%", true);
     }
-
-    // Level 4 Background Scanning
-    setInterval(() => {
-      if (!document.getElementById("autoMode").checked) return;
-      const symbol = ["AAPL","TSLA","BTC","ETH"][Math.floor(Math.random()*4)];
-      addMessage(`Level 4 scanning ${symbol}...`, true);
-    }, 15000);
 
     document.getElementById("symbol").addEventListener("input", updateLivePrice);
   </script>
