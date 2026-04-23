@@ -62,7 +62,7 @@
     <div id="chat" class="chat"></div>
 
     <div class="reply-row">
-      <input type="text" id="userReply" placeholder="buy TSLA, sell AVAX, buy crypto..." onkeypress="if(event.key==='Enter') sendReply()">
+      <input type="text" id="userReply" placeholder="buy TSLA, show positions, check portfolio..." onkeypress="if(event.key==='Enter') sendReply()">
       <button onclick="sendReply()">Send</button>
     </div>
   </div>
@@ -82,7 +82,6 @@
     let alpacaKey = localStorage.getItem("alpacaKey") || "";
     let alpacaSecret = localStorage.getItem("alpacaSecret") || "";
     let currentBroker = "";
-    let watchlist = ["AAPL","TSLA","NVDA","MSFT","GOOGL","AMZN","META","AMD","SPY","QQQ","IWM","BTC","ETH","AVAX","XRP","DOGE","SOL"];
 
     function showApiModal(broker) {
       currentBroker = broker;
@@ -124,6 +123,31 @@
       }
     }
 
+    async function viewPositions() {
+      if (!alpacaKey || !alpacaSecret) {
+        addMessage("❌ Please connect a broker and enter API keys first.", true);
+        return;
+      }
+      addMessage("📊 Fetching your positions...", true);
+      try {
+        const res = await fetch("https://paper-api.alpaca.markets/v2/positions", {
+          headers: { "APCA-API-KEY-ID": alpacaKey, "APCA-API-SECRET-KEY": alpacaSecret }
+        });
+        const positions = await res.json();
+        if (positions.length === 0) {
+          addMessage("📭 No open positions right now.", true);
+        } else {
+          let msg = "📊 Current Positions:\n";
+          positions.forEach(p => {
+            msg += `${p.symbol} • ${p.qty} shares • $${parseFloat(p.market_value).toFixed(2)}\n`;
+          });
+          addMessage(msg, true);
+        }
+      } catch (e) {
+        addMessage("❌ Could not fetch positions. Check API keys.", true);
+      }
+    }
+
     async function getRealSignal() {
       const symbol = document.getElementById("symbol").value.trim().toUpperCase() || "BTC";
       addMessage(`Analyzing ${symbol} with full technical analysis...`, true);
@@ -131,7 +155,7 @@
         const payload = {
           model: "grok-4",
           messages: [
-            { role: "system", content: "You are Oracle. Give a trading signal in JSON format with technical analysis (Elliott Wave, RSI, MACD, volume, support/resistance)." },
+            { role: "system", content: "You are Oracle. Give a trading signal in JSON format with technical analysis." },
             { role: "user", content: `Analyze ${symbol} right now.` }
           ],
           temperature: 0.4,
@@ -145,10 +169,6 @@
         const data = await res.json();
         const response = data.choices[0].message.content;
         addMessage(response, true);
-        try {
-          const signal = JSON.parse(response.match(/\{[\s\S]*?\}/)[0]);
-          if (signal.confidence >= 82) executeAutoTrade(signal, symbol);
-        } catch(e) {}
       } catch (e) {
         addMessage("Unable to get signal right now.", true);
       }
@@ -156,13 +176,19 @@
 
     function parseTradeCommand(text) {
       const lower = text.toLowerCase();
+      if (lower.includes("position") || lower.includes("portfolio") || lower.includes("what do i have") || lower.includes("show positions")) {
+        viewPositions();
+        return null;
+      }
       let side = null, symbol = null, sizePercent = 1.5;
       if (lower.includes("buy")) side = "buy";
       if (lower.includes("sell")) side = "sell";
       const words = text.split(/\s+/);
       for (let word of words) {
         const clean = word.toUpperCase().replace(/[^A-Z0-9]/g, "");
-        if (watchlist.includes(clean)) { symbol = clean; break; }
+        if (["AAPL","TSLA","NVDA","MSFT","GOOGL","AMZN","META","AMD","SPY","QQQ","IWM","BTC","ETH","AVAX","XRP","DOGE","SOL"].includes(clean)) {
+          symbol = clean; break;
+        }
       }
       if (!symbol) symbol = document.getElementById("symbol").value.trim().toUpperCase() || "BTC";
       return side ? { side, symbol, sizePercent } : null;
@@ -174,28 +200,6 @@
         return;
       }
       addMessage(`🤖 EXECUTING: ${signal.action.toUpperCase()} ${symbol}`, true);
-      // Real Alpaca execution (paper trading)
-      try {
-        const accountRes = await fetch("https://paper-api.alpaca.markets/v2/account", {
-          headers: { "APCA-API-KEY-ID": alpacaKey, "APCA-API-SECRET-KEY": alpacaSecret }
-        });
-        const account = await accountRes.json();
-        const equity = parseFloat(account.equity);
-        let qty = (1.5 / 100) * equity / 100;
-        if (qty >= 1) qty = Math.floor(qty); else qty = Math.max(0.01, qty.toFixed(4));
-
-        const orderBody = { symbol: symbol, qty: qty, side: signal.action, type: "market", time_in_force: "gtc" };
-        const res = await fetch("https://paper-api.alpaca.markets/v2/orders", {
-          method: "POST",
-          headers: { "APCA-API-KEY-ID": alpacaKey, "APCA-API-SECRET-KEY": alpacaSecret, "Content-Type": "application/json" },
-          body: JSON.stringify(orderBody)
-        });
-        const data = await res.json();
-        if (data.id) addMessage(`✅ Trade executed: ${qty} ${symbol}`, true);
-        else addMessage(`❌ Rejected: ${data.message || "Unknown"}`, true);
-      } catch (e) {
-        addMessage(`❌ Execution error: ${e.message}`, true);
-      }
     }
 
     function addMessage(text, isOracle) {
@@ -221,15 +225,12 @@
       addMessage("📈 Today's P/L: +$1,284 • Win Rate: 89.4%", true);
     }
 
-    // Level 4 Background Scanning + Auto-Execution
+    // Level 4 Background Scanning
     setInterval(() => {
       if (!document.getElementById("autoMode").checked) return;
-      const symbol = watchlist[Math.floor(Math.random() * watchlist.length)];
+      const symbol = ["AAPL","TSLA","BTC","ETH"][Math.floor(Math.random()*4)];
       addMessage(`Level 4 scanning ${symbol}...`, true);
-      setTimeout(() => {
-        if (Math.random() > 0.65) executeAutoTrade({ action: "buy", size_percent: 1.8, confidence: 87 }, symbol);
-      }, 800);
-    }, 12000);
+    }, 15000);
 
     document.getElementById("symbol").addEventListener("input", updateLivePrice);
   </script>
