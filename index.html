@@ -79,24 +79,23 @@
   </div>
 
   <script>
-    let alpacaKey = localStorage.getItem("alpacaKey") || "";
-    let alpacaSecret = localStorage.getItem("alpacaSecret") || "";
+    let brokerKeys = JSON.parse(localStorage.getItem("brokerKeys") || "{}");
     let currentBroker = "";
 
     function showApiModal(broker) {
       currentBroker = broker;
       document.getElementById("modalTitle").innerText = `Connect ${broker}`;
+      document.getElementById("modalKey").value = brokerKeys[broker.toLowerCase()]?.key || "";
+      document.getElementById("modalSecret").value = brokerKeys[broker.toLowerCase()]?.secret || "";
       document.getElementById("apiModal").style.display = "flex";
-      document.getElementById("modalKey").value = alpacaKey;
-      document.getElementById("modalSecret").value = alpacaSecret;
     }
 
     function saveModalKeys() {
-      alpacaKey = document.getElementById("modalKey").value.trim();
-      alpacaSecret = document.getElementById("modalSecret").value.trim();
-      if (alpacaKey) {
-        localStorage.setItem("alpacaKey", alpacaKey);
-        localStorage.setItem("alpacaSecret", alpacaSecret);
+      const key = document.getElementById("modalKey").value.trim();
+      const secret = document.getElementById("modalSecret").value.trim();
+      if (key) {
+        brokerKeys[currentBroker.toLowerCase()] = { key, secret };
+        localStorage.setItem("brokerKeys", JSON.stringify(brokerKeys));
         closeModal();
         document.getElementById("priceStatus").innerHTML = `✅ ${currentBroker} keys saved and connected`;
       } else {
@@ -123,31 +122,6 @@
       }
     }
 
-    async function viewPositions() {
-      if (!alpacaKey || !alpacaSecret) {
-        addMessage("❌ Please connect a broker and enter API keys first.", true);
-        return;
-      }
-      addMessage("📊 Fetching your positions...", true);
-      try {
-        const res = await fetch("https://paper-api.alpaca.markets/v2/positions", {
-          headers: { "APCA-API-KEY-ID": alpacaKey, "APCA-API-SECRET-KEY": alpacaSecret }
-        });
-        const positions = await res.json();
-        if (positions.length === 0) {
-          addMessage("📭 No open positions right now.", true);
-        } else {
-          let msg = "📊 Current Positions:\n";
-          positions.forEach(p => {
-            msg += `${p.symbol} • ${p.qty} shares • $${parseFloat(p.market_value).toFixed(2)}\n`;
-          });
-          addMessage(msg, true);
-        }
-      } catch (e) {
-        addMessage("❌ Could not fetch positions. Check API keys.", true);
-      }
-    }
-
     async function getRealSignal() {
       const symbol = document.getElementById("symbol").value.trim().toUpperCase() || "BTC";
       addMessage(`Analyzing ${symbol} with full technical analysis...`, true);
@@ -155,7 +129,7 @@
         const payload = {
           model: "grok-4",
           messages: [
-            { role: "system", content: "You are Oracle. Give a trading signal in JSON format with technical analysis." },
+            { role: "system", content: "You are Oracle. Give a trading signal in JSON format with technical analysis (Elliott Wave, RSI, MACD, volume, support/resistance)." },
             { role: "user", content: `Analyze ${symbol} right now.` }
           ],
           temperature: 0.4,
@@ -170,7 +144,32 @@
         const response = data.choices[0].message.content;
         addMessage(response, true);
       } catch (e) {
-        addMessage("Unable to get signal right now.", true);
+        addMessage("Unable to get signal right now. Please try again in a few seconds.", true);
+      }
+    }
+
+    async function viewPositions() {
+      if (!brokerKeys.alpaca) {
+        addMessage("❌ Please connect Alpaca and enter API keys first.", true);
+        return;
+      }
+      addMessage("📊 Fetching your positions...", true);
+      try {
+        const res = await fetch("https://paper-api.alpaca.markets/v2/positions", {
+          headers: { "APCA-API-KEY-ID": brokerKeys.alpaca.key, "APCA-API-SECRET-KEY": brokerKeys.alpaca.secret || "" }
+        });
+        const positions = await res.json();
+        if (positions.length === 0) {
+          addMessage("📭 No open positions right now.", true);
+        } else {
+          let msg = "📊 Current Positions:\n";
+          positions.forEach(p => {
+            msg += `${p.symbol} • ${p.qty} shares • $${parseFloat(p.market_value).toFixed(2)}\n`;
+          });
+          addMessage(msg, true);
+        }
+      } catch (e) {
+        addMessage("❌ Could not fetch positions.", true);
       }
     }
 
@@ -195,7 +194,7 @@
     }
 
     async function executeAutoTrade(signal, symbol) {
-      if (!alpacaKey || !alpacaSecret) {
+      if (!brokerKeys.alpaca) {
         addMessage("❌ Please connect a broker and enter API keys first.", true);
         return;
       }
